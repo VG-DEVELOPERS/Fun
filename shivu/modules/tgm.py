@@ -1,7 +1,7 @@
 import requests
 from telegram import Update
 from telegram.ext import CommandHandler, CallbackContext
-from Grabber import application  # Your bot instance
+from shivu import application  # Your bot instance
 
 IMGBB_API_KEY = '21786e21eb0369339a3c2a2d9c561190'
 
