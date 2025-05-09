@@ -2,16 +2,16 @@ class Config(object):
     LOGGER = True
 
     # Get this value from my.telegram.org/apps
-    OWNER_ID = "6534367642"
-    sudo_users = "1602509384" ,"7350197183", "1837623818"
+    OWNER_ID = "7717913705"
+    sudo_users = "5939547901" ,"5469324918", "7692788302", "7333491739", "7717913705"
     GROUP_ID = -1002004197830
-    TOKEN = "7063220368:AAEty7C6Z0MrlmUpmPH81J-AhM7Jyum4oOI"
-    mongo_url = "mongodb+srv://tiwarireeta004:peqxLEd36RAg7ors@cluster0.furypd3.mongodb.net/?retryWrites=true&w=majority"
+    TOKEN = "7297939280:AAE7i1Y4duGdBtSI_3YfUV1eDIgOxT3NV7E"
+    mongo_url = "mongodb+srv://botmaker9675208:botmaker9675208@cluster0.sc9mq8b.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"
     PHOTO_URL =["https://telegra.ph/file/b925c3985f0f325e62e17.jpg", "https://telegra.ph/file/4211fb191383d895dab9d.jpg"]
-    SUPPORT_CHAT = "NAMIKAZECPAN"
-    UPDATE_CHAT = "NAMIKAZECPAN"
-    BOT_USERNAME = "GUESSEM_ALL_ROBOT"
-    CHARA_CHANNEL_ID = "-1002004197830"
+    SUPPORT_CHAT = "soon"
+    UPDATE_CHAT = "soon"
+    BOT_USERNAME = "Pick_Your_Waifu_Bot"
+    CHARA_CHANNEL_ID = "-1002568368709"
     api_id = 24074986
     api_hash = "f4f6272a85d0e50e39a24cb378be118d"
 
