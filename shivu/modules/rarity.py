@@ -10,13 +10,13 @@ from shivu import collection, user_collection, application
 
 RARITY_MAP = {
     "1": "⚪ Common",
-    "2": "🟣 Rare",
+    "2": "🟠 Rare",
     "3": "🟡 Legendary",
     "4": "🟢 Medium",
-    "5": "💮 Limited",
-    "6": "🔮 Christmas",
-    "7": "🏀 Basketball",
-    "8": "⚽ Football"
+    "5": "🔮 limited edition",
+    "6": "⚜️ premium",
+    "7": "🎴 universal",
+
 }
 
 selected_rarity = None
