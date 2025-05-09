@@ -47,7 +47,7 @@ async def start(update: Update, context: CallbackContext) -> None:
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     if update.effective_chat.type == "private":
-    caption = f"""
+       caption = f"""
 👋 **Welcome, {escape(first_name)}!**
 
 🎌 I am **Waifu Warzone** — your gateway to anime glory!  
