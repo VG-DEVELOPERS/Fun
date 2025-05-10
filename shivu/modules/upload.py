@@ -23,6 +23,7 @@ rarity_map =
 10 (❄️ Winter), 
 11 (🍁 Autumn), 
 12 (🌸 Festival)
+13 (💞 Valentine)
 """
 
 RARITY_MAP = {
@@ -37,7 +38,8 @@ RARITY_MAP = {
     9: "🫧 Mist",
     10: "❄️ Winter",
     11: "🍁 Autumn",
-    12: "🌸 Festival"
+    12: "🌸 Festival",
+    13: "💞 Valentine"
 }
 
 async def get_next_sequence_number(sequence_name):
