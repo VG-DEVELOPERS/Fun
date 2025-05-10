@@ -11,7 +11,7 @@ ALL_RARITIES = [
 ]
 
 async def toggle_rarity_menu(update: Update, context: CallbackContext):
-    if update.effective_user.id not in [OWNER_ID]:  # replace OWNER_ID with your Telegram ID
+    if update.effective_user.id not in [7717913705]:  # replace OWNER_ID with your Telegram ID
         await update.message.reply_text("Only the bot owner can use this command.")
         return
 
