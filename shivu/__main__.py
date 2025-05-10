@@ -35,10 +35,10 @@ RARITY_THRESHOLDS = {
     "🔮 limited edition": 800,
     "⚜️ premium": 1500,
     "🎐 Crystal": 2500,
-    "🎊 Festival": 1800,
-    "❄️ Winter": 2000,
-    "🌞 Summer": 2000,
-    "🍁 Autumn": 2000,
+    "🎊 Festival": 180000000,
+    "❄️ Winter": 2000000000,
+    "🌞 Summer": 2000000000,
+    "🍁 Autumn": 2000000000,
     "🌫️ Mist": 2000
 }
 
