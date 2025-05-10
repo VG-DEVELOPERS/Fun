@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 DEVS = (7717913705)
 
-async def get_unique_characters(receiver_id, target_rarities=['🟢 Common', '🟠 Rare', '🟡 Legendary']):
+async def get_unique_characters(receiver_id, target_rarities=['⚪ Common', '🟣 Rare', '🟡 Legendary']):
     try:
         pipeline = [
             {'$match': {'rarity': {'$in': target_rarities}, 'id': {'$nin': [char['id'] for char in (await user_collection.find_one({'id': receiver_id}, {'characters': 1}))['characters']]}}},
