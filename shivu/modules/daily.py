@@ -3,7 +3,7 @@ import html
 from datetime import datetime
 from pyrogram import Client, filters
 from pyrogram.types import Message
-from shivu import user_collection, collection, Grabberu as app
+from shivu import user_collection, collection, shivuu as app
 
 # Allowed group ID (Only works in this group)
 ALLOWED_GROUP_ID = -1002411662634  # Replace with your group's ID
