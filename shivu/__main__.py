@@ -20,10 +20,8 @@ from shivu import (
     shivuu
 )
 
-# MongoDB config collection for enabled rarities per chat
 group_config_collection = db["group_config"]
 
-# Rarity spawn thresholds
 RARITY_THRESHOLDS = {
     "⚪ Common": 100,
     "🟢 Medium": 200,
@@ -88,27 +86,27 @@ async def toggle_rarity(update: Update, context: CallbackContext):
     )
     await update.message.reply_text(f"Rarity '{rarity}' is now {'enabled' if status == 'on' else 'disabled'}.")
 
-async def send_image(update: Update, context: CallbackContext):
-    chat_id = update.effective_chat.id
+async def send_image(update: Update, context: CallbackContext, chat_id: int, message_count: int):
     all_characters = await collection.find({}).to_list(length=None)
     enabled_rarities = await get_enabled_rarities(chat_id)
-    message_count = message_counts.get(chat_id, 0)
 
-    valid_characters = [
-        char for char in all_characters
-        if char['rarity'] in enabled_rarities and message_count % RARITY_THRESHOLDS[char['rarity']] == 0
-    ]
+    valid_rarities = [r for r in enabled_rarities if message_count % RARITY_THRESHOLDS.get(r, 999999) == 0]
 
-    if not valid_characters:
+    if not valid_rarities:
+        return
+
+    candidates = [char for char in all_characters if char['rarity'] in valid_rarities]
+
+    if not candidates:
         return
 
     if chat_id not in sent_characters:
         sent_characters[chat_id] = []
 
-    pool = [c for c in valid_characters if c['id'] not in sent_characters[chat_id]]
+    pool = [c for c in candidates if c['id'] not in sent_characters[chat_id]]
     if not pool:
         sent_characters[chat_id] = []
-        pool = valid_characters
+        pool = candidates
 
     character = random.choice(pool)
     sent_characters[chat_id].append(character['id'])
@@ -132,7 +130,7 @@ async def message_counter(update: Update, context: CallbackContext):
 
     async with locks[chat_id]:
         chat_data = await user_totals_collection.find_one({'chat_id': chat_id}) or {}
-        message_frequency = chat_data.get('message_frequency', 100)
+        message_frequency = chat_data.get('message_frequency', 1)
 
         if chat_id in last_user and last_user[chat_id]['user_id'] == user_id:
             last_user[chat_id]['count'] += 1
@@ -146,7 +144,7 @@ async def message_counter(update: Update, context: CallbackContext):
             last_user[chat_id] = {'user_id': user_id, 'count': 1}
 
         message_counts[chat_id] = message_counts.get(chat_id, 0) + 1
-        await send_image(update, context)
+        await send_image(update, context, chat_id=int(chat_id), message_count=message_counts[chat_id])
 
 async def guess(update: Update, context: CallbackContext):
     chat_id = update.effective_chat.id
@@ -187,45 +185,34 @@ async def guess(update: Update, context: CallbackContext):
         )
     else:
         await update.message.reply_text("Incorrect name. Try again.")
-        
-async def fav(update: Update, context: CallbackContext) -> None:
+
+async def fav(update: Update, context: CallbackContext):
     user_id = update.effective_user.id
 
-    
     if not context.args:
-        await update.message.reply_text('Please provide Character id...')
+        await update.message.reply_text('Please provide Character ID...')
         return
 
     character_id = context.args[0]
 
-    
     user = await user_collection.find_one({'id': user_id})
     if not user:
-        await update.message.reply_text('You have not Guessed any characters yet....')
+        await update.message.reply_text('You have not guessed any characters yet.')
         return
-
 
     character = next((c for c in user['characters'] if c['id'] == character_id), None)
     if not character:
-        await update.message.reply_text('This Character is Not In your collection')
+        await update.message.reply_text('Character not found in your collection.')
         return
 
-    
-    user['favorites'] = [character_id]
-
-    
-    await user_collection.update_one({'id': user_id}, {'$set': {'favorites': user['favorites']}})
-
-    await update.message.reply_text(f'Character {character["name"]} has been added to your favorite...')
-    
-
+    await user_collection.update_one({'id': user_id}, {'$set': {'favorites': [character_id]}})
+    await update.message.reply_text(f'Character {character["name"]} has been added to your favorites.')
 
 def main():
     application.add_handler(CommandHandler(["guess", "protecc", "collect", "grab", "hunt"], guess, block=False))
-    application.add_handler(CommandHandler("fav", fav, block=False))
     application.add_handler(CommandHandler("setrarity", toggle_rarity, block=False))
+    application.add_handler(CommandHandler("fav", fav, block=False))
     application.add_handler(MessageHandler(filters.ALL, message_counter, block=False))
-
     application.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
