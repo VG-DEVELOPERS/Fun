@@ -10,6 +10,7 @@ rarity_map = {
     "5": "🔮 limited edition",
     "6": "⚜️ premium",
     "7": "🎴 universal",
+    "8": "🎐 Crystal"
 
 }
 
