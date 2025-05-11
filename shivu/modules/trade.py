@@ -116,92 +116,104 @@ async def on_callback_query(client, callback_query):
 
 
 
+
 pending_gifts = {}
 
-
 @shivuu.on_message(filters.command("gift"))
-async def gift(client, message):
+async def gift_character(client, message):
     sender_id = message.from_user.id
 
     if not message.reply_to_message:
-        await message.reply_text("You need to reply to a user's message to gift a character!")
-        return
+        return await message.reply_text("🎁 Reply to the user you want to gift a character to!")
 
-    receiver_id = message.reply_to_message.from_user.id
-    receiver_username = message.reply_to_message.from_user.username
-    receiver_first_name = message.reply_to_message.from_user.first_name
+    receiver = message.reply_to_message.from_user
+    receiver_id = receiver.id
 
     if sender_id == receiver_id:
-        await message.reply_text("You can't gift a character to yourself!")
-        return
+        return await message.reply_text("😅 You can't gift a character to yourself!")
 
     if len(message.command) != 2:
-        await message.reply_text("You need to provide a character ID!")
-        return
+        return await message.reply_text("Usage:\n`/gift <character_id>`", parse_mode="Markdown")
 
     character_id = message.command[1]
-
     sender = await user_collection.find_one({'id': sender_id})
 
-    character = next((character for character in sender['characters'] if character['id'] == character_id), None)
+    if not sender or 'characters' not in sender:
+        return await message.reply_text("❌ You have no characters to gift.")
 
-    if not character:
-        await message.reply_text("You don't have this character in your collection!")
-        return
+    # Find the character in sender's list
+    character_list = sender['characters']
+    character_index = next((i for i, char in enumerate(character_list) if char['id'] == character_id), None)
 
-    
+    if character_index is None:
+        return await message.reply_text("❌ You don't own this character.")
+
+    character = character_list[character_index]
+
+    # Store gift pending
     pending_gifts[(sender_id, receiver_id)] = {
         'character': character,
-        'receiver_username': receiver_username,
-        'receiver_first_name': receiver_first_name
+        'index': character_index,
+        'receiver_first_name': receiver.first_name,
+        'receiver_username': receiver.username,
     }
 
-    
-    keyboard = InlineKeyboardMarkup(
-        [
-            [InlineKeyboardButton("Confirm Gift", callback_data="confirm_gift")],
-            [InlineKeyboardButton("Cancel Gift", callback_data="cancel_gift")]
-        ]
+    # Buttons
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Confirm Gift", callback_data="confirm_gift")],
+        [InlineKeyboardButton("❌ Cancel", callback_data="cancel_gift")]
+    ])
+
+    await message.reply_text(
+        f"🎁 Do you really want to gift character **{character['name']}** to [{receiver.first_name}](tg://user?id={receiver_id})?",
+        parse_mode="Markdown",
+        reply_markup=keyboard
     )
 
-    await message.reply_text(f"do You Really Wanns To Gift {message.reply_to_message.from_user.mention} ?", reply_markup=keyboard)
 
 @shivuu.on_callback_query(filters.create(lambda _, __, query: query.data in ["confirm_gift", "cancel_gift"]))
-async def on_callback_query(client, callback_query):
+async def handle_gift_confirm(client, callback_query):
     sender_id = callback_query.from_user.id
 
-    
-    for (_sender_id, receiver_id), gift in pending_gifts.items():
-        if _sender_id == sender_id:
+    for (s_id, r_id), gift_data in pending_gifts.items():
+        if s_id == sender_id:
             break
     else:
-        await callback_query.answer("This is not for you!", show_alert=True)
-        return
+        return await callback_query.answer("This gift request is not for you.", show_alert=True)
+
+    receiver_id = r_id
+    gift_character = gift_data['character']
 
     if callback_query.data == "confirm_gift":
-        
         sender = await user_collection.find_one({'id': sender_id})
         receiver = await user_collection.find_one({'id': receiver_id})
 
-        
-        sender['characters'].remove(gift['character'])
+        # Remove 1 copy only
+        sender['characters'].pop(gift_data['index'])
         await user_collection.update_one({'id': sender_id}, {'$set': {'characters': sender['characters']}})
 
-        
+        # Add to receiver
         if receiver:
-            await user_collection.update_one({'id': receiver_id}, {'$push': {'characters': gift['character']}})
+            existing_ids = [c['id'] for c in receiver.get('characters', [])]
+            if gift_character['id'] not in existing_ids:
+                await user_collection.update_one({'id': receiver_id}, {'$push': {'characters': gift_character}})
         else:
-            
             await user_collection.insert_one({
                 'id': receiver_id,
-                'username': gift['receiver_username'],
-                'first_name': gift['receiver_first_name'],
-                'characters': [gift['character']],
+                'username': gift_data['receiver_username'],
+                'first_name': gift_data['receiver_first_name'],
+                'characters': [gift_character]
             })
 
-        
+        # Cleanup
         del pending_gifts[(sender_id, receiver_id)]
 
-        await callback_query.message.edit_text(f"You have successfully gifted your character to [{gift['receiver_first_name']}](tg://user?id={receiver_id})!")
+        await callback_query.message.edit_text(
+            f"🎁 You have successfully gifted **{gift_character['name']}** to [{gift_data['receiver_first_name']}](tg://user?id={receiver_id})!",
+            parse_mode="Markdown"
+        )
 
+    elif callback_query.data == "cancel_gift":
+        del pending_gifts[(sender_id, receiver_id)]
+        await callback_query.message.edit_text("❌ Gift cancelled.")
 
