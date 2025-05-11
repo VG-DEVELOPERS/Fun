@@ -47,10 +47,11 @@ async def paginate_alphabets(_, query: CallbackQuery):
 async def show_animes_by_letter(_, query: CallbackQuery):
     letter = query.matches[0].group(1)
     anime_cursor = collection.find({"anime": {"$regex": f"^{letter}", "$options": "i"}})
-    anime_list = sorted(set())
+    anime_set = set()
     async for doc in anime_cursor:
-        anime_list.add(doc["anime"])
-    anime_list = sorted(list(anime_list))
+        anime_set.add(doc["anime"])
+    anime_list = sorted(list(anime_set))
+
 
     if not anime_list:
         return await query.answer("No anime found for this letter.", show_alert=True)
@@ -68,10 +69,10 @@ async def paginate_animes(_, query: CallbackQuery):
     letter = query.matches[0].group(1)
     page = int(query.matches[0].group(2))
     anime_cursor = collection.find({"anime": {"$regex": f"^{letter}", "$options": "i"}})
-    anime_list = sorted(set())
+    anime_set = set()
     async for doc in anime_cursor:
-        anime_list.add(doc["anime"])
-    anime_list = sorted(list(anime_list))
+    anime_set.add(doc["anime"])
+anime_list = sorted(list(anime_set))
 
     per_page = 3
     start = page * per_page
