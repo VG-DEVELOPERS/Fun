@@ -2,7 +2,7 @@ import os
 import random
 import html
 
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, InputMediaPhoto
 from telegram.ext import CommandHandler, CallbackContext, CallbackQueryHandler
 
 from shivu import (
@@ -12,23 +12,27 @@ from shivu import (
 )
 
 
+# Top menu with buttons
 async def top_menu(update: Update, context: CallbackContext) -> None:
     buttons = [
         [InlineKeyboardButton("📊 Top Users", callback_data="top_users")],
         [InlineKeyboardButton("👥 Top Groups", callback_data="top_groups")],
         [InlineKeyboardButton("🏆 Group Collectors", callback_data="group_collectors")]
     ]
-    await update.message.reply_text(
-        "📈 Choose a leaderboard to view:",
+    photo_url = random.choice(PHOTO_URL)
+    await update.message.reply_photo(
+        photo=photo_url,
+        caption="📈 Choose a leaderboard to view:",
+        parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(buttons)
     )
 
 
+# Callback for button presses
 async def leaderboard_callback(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     await query.answer()
     data = query.data
-    photo_url = random.choice(PHOTO_URL)
 
     if data == "top_users":
         cursor = user_collection.aggregate([
@@ -37,6 +41,7 @@ async def leaderboard_callback(update: Update, context: CallbackContext) -> None
         ])
         leaderboard_data = await cursor.to_list(length=10)
         title = "<b>🏅 TOP 10 USERS WITH MOST CHARACTERS</b>\n\n"
+
     elif data == "top_groups":
         cursor = top_global_groups_collection.aggregate([
             {"$project": {"group_name": 1, "count": 1}},
@@ -44,6 +49,7 @@ async def leaderboard_callback(update: Update, context: CallbackContext) -> None
         ])
         leaderboard_data = await cursor.to_list(length=10)
         title = "<b>👑 TOP 10 GROUPS WHO GUESSED MOST CHARACTERS</b>\n\n"
+
     elif data == "group_collectors":
         chat_id = query.message.chat.id
         cursor = group_user_totals_collection.aggregate([
@@ -53,6 +59,7 @@ async def leaderboard_callback(update: Update, context: CallbackContext) -> None
         ])
         leaderboard_data = await cursor.to_list(length=10)
         title = "<b>🏆 TOP 10 USERS IN THIS GROUP</b>\n\n"
+
     else:
         return
 
@@ -68,12 +75,15 @@ async def leaderboard_callback(update: Update, context: CallbackContext) -> None
             count = entry.get("character_count", 0)
             leaderboard_message += f'{i}. <a href="https://t.me/{username}"><b>{name}</b></a> ➾ <b>{count}</b>\n'
 
-    await query.edit_message_media(
-        media=await context.bot.send_photo(chat_id=query.message.chat_id, photo=photo_url, caption=leaderboard_message, parse_mode='HTML'),
+    # Reuse the same photo and update the caption
+    await query.edit_message_caption(
+        caption=leaderboard_message,
+        parse_mode="HTML",
         reply_markup=query.message.reply_markup
     )
 
 
+# Command for bot stats (OWNER only)
 async def stats(update: Update, context: CallbackContext) -> None:
     if update.effective_user.id != OWNER_ID:
         await update.message.reply_text("You are not authorized to use this command.")
@@ -83,6 +93,7 @@ async def stats(update: Update, context: CallbackContext) -> None:
     await update.message.reply_text(f"Total Users: {user_count}\nTotal Groups: {len(group_count)}")
 
 
+# SUDO: Export user list
 async def send_users_document(update: Update, context: CallbackContext) -> None:
     if str(update.effective_user.id) not in SUDO_USERS:
         return await update.message.reply_text('Only for Sudo users...')
@@ -95,6 +106,7 @@ async def send_users_document(update: Update, context: CallbackContext) -> None:
     os.remove('users.txt')
 
 
+# SUDO: Export group list
 async def send_groups_document(update: Update, context: CallbackContext) -> None:
     if str(update.effective_user.id) not in SUDO_USERS:
         return await update.message.reply_text('Only for Sudo users...')
@@ -107,9 +119,10 @@ async def send_groups_document(update: Update, context: CallbackContext) -> None
     os.remove('groups.txt')
 
 
-# Register handlers
+# Register all handlers
 application.add_handler(CommandHandler("top", top_menu, block=False))
 application.add_handler(CallbackQueryHandler(leaderboard_callback, pattern="^(top_users|top_groups|group_collectors)$"))
 application.add_handler(CommandHandler("stats", stats, block=False))
 application.add_handler(CommandHandler("list", send_users_document, block=False))
 application.add_handler(CommandHandler("groups", send_groups_document, block=False))
+                       
