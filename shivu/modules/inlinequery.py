@@ -5,23 +5,25 @@ from uuid import uuid4
 from cachetools import TTLCache
 from pymongo import ASCENDING
 
-from telegram import InlineQueryResultPhoto, Update
-from telegram.ext import InlineQueryHandler, CallbackContext
+from telegram import (
+    Update, InlineQueryResultPhoto, InlineKeyboardMarkup, InlineKeyboardButton
+)
+from telegram.ext import InlineQueryHandler, CallbackQueryHandler, CallbackContext
 
 from shivu import user_collection, collection, application, db
 
-# Indexing for performance
+# MongoDB indexing for fast lookups
 db.characters.create_index([('id', ASCENDING)])
 db.characters.create_index([('anime', ASCENDING)])
 db.characters.create_index([('img_url', ASCENDING)])
 db.user_collection.create_index([('characters.id', ASCENDING)])
 db.user_collection.create_index([('characters.name', ASCENDING)])
-db.user_collection.create_index([('characters.img_url', ASCENDING)])
 
-# Caching
+# Cache setup
 all_characters_cache = TTLCache(maxsize=10000, ttl=36000)
 user_collection_cache = TTLCache(maxsize=10000, ttl=60)
 
+# Inline query handler
 async def inlinequery(update: Update, context: CallbackContext):
     query = update.inline_query.query.strip()
     offset = int(update.inline_query.offset) if update.inline_query.offset else 0
@@ -66,7 +68,6 @@ async def inlinequery(update: Update, context: CallbackContext):
     next_offset = str(offset + 50) if offset + 50 < total else ""
 
     for character in characters:
-        global_count = await user_collection.count_documents({'characters.id': character['id']})
         anime_total = await collection.count_documents({'anime': character['anime']})
 
         if user:
@@ -85,9 +86,12 @@ async def inlinequery(update: Update, context: CallbackContext):
                 f"🎴 <b>{character['name']}</b>\n"
                 f"🌸 <b>{character['anime']}</b>\n"
                 f"🏅 <b>{character.get('rarity', 'Unknown')}</b>\n"
-                f"🆔️ <code>{character['id']}</code>\n"
-                f"🌍 Guessed Globally: <b>{global_count}</b> times"
+                f"🆔️ <code>{character['id']}</code>"
             )
+
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🌍 Guessed Globally", callback_data=f"guessed_{character['id']}")]
+        ])
 
         results.append(
             InlineQueryResultPhoto(
@@ -95,11 +99,30 @@ async def inlinequery(update: Update, context: CallbackContext):
                 photo_url=character['img_url'],
                 thumbnail_url=character['img_url'],
                 caption=caption,
-                parse_mode='HTML'
+                parse_mode='HTML',
+                reply_markup=keyboard
             )
         )
 
     await update.inline_query.answer(results, next_offset=next_offset, cache_time=5)
 
-# Register handler
+# Callback button handler for global guess count
+async def global_guess_callback(update: Update, context: CallbackContext):
+    query = update.callback_query
+    await query.answer()
+
+    if not query.data.startswith("guessed_"):
+        return
+
+    char_id = query.data.split("_")[1]
+    count = await user_collection.count_documents({'characters.id': char_id})
+
+    await query.answer(
+        text=f"🌍 This character has been collected by {count} user(s) globally!",
+        show_alert=True
+    )
+
+# Register handlers
 application.add_handler(InlineQueryHandler(inlinequery, block=False))
+application.add_handler(CallbackQueryHandler(global_guess_callback, block=False))
+            
