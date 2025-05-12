@@ -3,7 +3,7 @@ from telegram import Update
 from telegram.ext import CommandHandler, CallbackContext
 from shivu import application  # Your bot instance
 
-IMGBB_API_KEY = '21786e21eb0369339a3c2a2d9c561190'
+IMGBB_API_KEY = '8d029ab5bf78dfb2bf15002664ebb4ac'
 
 # Function to upload image to ImgBB
 async def upload_to_imgbb(image_data):
