@@ -1,4 +1,4 @@
-import urllib.request
+import re
 from pymongo import ReturnDocument
 from telegram import Update
 from telegram.ext import CommandHandler, CallbackContext
@@ -42,6 +42,15 @@ RARITY_MAP = {
     13: "💞 Valentine"
 }
 
+def is_valid_url(url):
+    regex = re.compile(
+        r'^(https?://)'
+        r'([\w\-]+\.)+[\w\-]{2,4}'
+        r'(/[^\s]*)?$',
+        re.IGNORECASE
+    )
+    return re.match(regex, url) is not None
+
 async def get_next_sequence_number(sequence_name):
     sequence_collection = db.sequences
     sequence_document = await sequence_collection.find_one_and_update(
@@ -54,6 +63,7 @@ async def get_next_sequence_number(sequence_name):
         return 0
     return sequence_document['sequence_value']
 
+# /upload command
 async def upload(update: Update, context: CallbackContext) -> None:
     if str(update.effective_user.id) not in sudo_users:
         await update.message.reply_text('Ask My Sensei...')
@@ -65,36 +75,35 @@ async def upload(update: Update, context: CallbackContext) -> None:
             await update.message.reply_text(WRONG_FORMAT_TEXT)
             return
 
+        image_url = args[0]
+        if not is_valid_url(image_url):
+            await update.message.reply_text('Invalid URL.')
+            return
+
         character_name = args[1].replace('-', ' ').title()
         anime = args[2].replace('-', ' ').title()
 
         try:
-            urllib.request.urlopen(args[0])
-        except:
-            await update.message.reply_text('Invalid URL.')
-            return
-
-        try:
             rarity = RARITY_MAP[int(args[3])]
         except KeyError:
-            await update.message.reply_text('Invalid rarity. Please use numbers from 1 to 12.')
+            await update.message.reply_text('Invalid rarity. Please use numbers from 1 to 13.')
             return
 
-        id = str(await get_next_sequence_number('character_id')).zfill(2)
+        char_id = str(await get_next_sequence_number('character_id')).zfill(2)
 
         character = {
-            'img_url': args[0],
+            'img_url': image_url,
             'name': character_name,
             'anime': anime,
             'rarity': rarity,
-            'id': id
+            'id': char_id
         }
 
         try:
             message = await context.bot.send_photo(
                 chat_id=CHARA_CHANNEL_ID,
-                photo=args[0],
-                caption=f'<b>Character Name:</b> {character_name}\n<b>Anime Name:</b> {anime}\n<b>Rarity:</b> {rarity}\n<b>ID:</b> {id}\nAdded by <a href="tg://user?id={update.effective_user.id}">{update.effective_user.first_name}</a>',
+                photo=image_url,
+                caption=f'<b>Character Name:</b> {character_name}\n<b>Anime Name:</b> {anime}\n<b>Rarity:</b> {rarity}\n<b>ID:</b> {char_id}\nAdded by <a href="tg://user?id={update.effective_user.id}">{update.effective_user.first_name}</a>',
                 parse_mode='HTML'
             )
             character['message_id'] = message.message_id
@@ -106,6 +115,7 @@ async def upload(update: Update, context: CallbackContext) -> None:
     except Exception as e:
         await update.message.reply_text(f'Upload failed. Error: {str(e)}\nContact support: {SUPPORT_CHAT}')
 
+# /delete command
 async def delete(update: Update, context: CallbackContext) -> None:
     if str(update.effective_user.id) not in sudo_users:
         await update.message.reply_text('Ask my Sensei to use this command.')
@@ -119,13 +129,17 @@ async def delete(update: Update, context: CallbackContext) -> None:
 
         character = await collection.find_one_and_delete({'id': args[0]})
         if character:
-            await context.bot.delete_message(chat_id=CHARA_CHANNEL_ID, message_id=character['message_id'])
-            await update.message.reply_text('Character deleted successfully.')
+            try:
+                await context.bot.delete_message(chat_id=CHARA_CHANNEL_ID, message_id=character['message_id'])
+                await update.message.reply_text('Character deleted successfully.')
+            except:
+                await update.message.reply_text('Character deleted from DB, but not found in channel.')
         else:
-            await update.message.reply_text('Character deleted from DB, but not found in channel.')
+            await update.message.reply_text('Character not found in database.')
     except Exception as e:
         await update.message.reply_text(f'Error: {str(e)}')
 
+# /update command
 async def update_char(update: Update, context: CallbackContext) -> None:
     if str(update.effective_user.id) not in sudo_users:
         await update.message.reply_text('You do not have permission to use this command.')
@@ -137,50 +151,63 @@ async def update_char(update: Update, context: CallbackContext) -> None:
             await update.message.reply_text('Incorrect format. Use: /update id field new_value')
             return
 
-        character = await collection.find_one({'id': args[0]})
+        char_id, field, value = args
+        character = await collection.find_one({'id': char_id})
         if not character:
             await update.message.reply_text('Character not found.')
             return
 
         valid_fields = ['img_url', 'name', 'anime', 'rarity']
-        if args[1] not in valid_fields:
+        if field not in valid_fields:
             await update.message.reply_text(f'Invalid field. Choose from: {", ".join(valid_fields)}')
             return
 
-        if args[1] in ['name', 'anime']:
-            new_value = args[2].replace('-', ' ').title()
-        elif args[1] == 'rarity':
+        if field == 'name' or field == 'anime':
+            new_value = value.replace('-', ' ').title()
+        elif field == 'rarity':
             try:
-                new_value = RARITY_MAP[int(args[2])]
+                new_value = RARITY_MAP[int(value)]
             except KeyError:
-                await update.message.reply_text('Invalid rarity number. Use 1–12.')
+                await update.message.reply_text('Invalid rarity number. Use 1–13.')
                 return
+        elif field == 'img_url':
+            if not is_valid_url(value):
+                await update.message.reply_text('Invalid image URL.')
+                return
+            new_value = value
         else:
-            new_value = args[2]
+            new_value = value
 
-        await collection.find_one_and_update({'id': args[0]}, {'$set': {args[1]: new_value}})
+        await collection.find_one_and_update({'id': char_id}, {'$set': {field: new_value}})
 
-        if args[1] == 'img_url':
-            await context.bot.delete_message(chat_id=CHARA_CHANNEL_ID, message_id=character['message_id'])
-            message = await context.bot.send_photo(
-                chat_id=CHARA_CHANNEL_ID,
-                photo=new_value,
-                caption=f'<b>Character Name:</b> {character["name"]}\n<b>Anime Name:</b> {character["anime"]}\n<b>Rarity:</b> {character["rarity"]}\n<b>ID:</b> {character["id"]}\nUpdated by <a href="tg://user?id={update.effective_user.id}">{update.effective_user.first_name}</a>',
-                parse_mode='HTML'
-            )
-            await collection.find_one_and_update({'id': args[0]}, {'$set': {'message_id': message.message_id}})
-        else:
-            await context.bot.edit_message_caption(
-                chat_id=CHARA_CHANNEL_ID,
-                message_id=character['message_id'],
-                caption=f'<b>Character Name:</b> {character["name"]}\n<b>Anime Name:</b> {character["anime"]}\n<b>Rarity:</b> {character["rarity"]}\n<b>ID:</b> {character["id"]}\nUpdated by <a href="tg://user?id={update.effective_user.id}">{update.effective_user.first_name}</a>',
-                parse_mode='HTML'
-            )
+        # Update channel message
+        updated_character = await collection.find_one({'id': char_id})
+
+        try:
+            if field == 'img_url':
+                await context.bot.delete_message(chat_id=CHARA_CHANNEL_ID, message_id=character['message_id'])
+                message = await context.bot.send_photo(
+                    chat_id=CHARA_CHANNEL_ID,
+                    photo=new_value,
+                    caption=f"<b>Character Name:</b> {updated_character['name']}\n<b>Anime Name:</b> {updated_character['anime']}\n<b>Rarity:</b> {updated_character['rarity']}\n<b>ID:</b> {updated_character['id']}\nUpdated by <a href='tg://user?id={update.effective_user.id}'>{update.effective_user.first_name}</a>",
+                    parse_mode='HTML'
+                )
+                await collection.find_one_and_update({'id': char_id}, {'$set': {'message_id': message.message_id}})
+            else:
+                await context.bot.edit_message_caption(
+                    chat_id=CHARA_CHANNEL_ID,
+                    message_id=character['message_id'],
+                    caption=f"<b>Character Name:</b> {updated_character['name']}\n<b>Anime Name:</b> {updated_character['anime']}\n<b>Rarity:</b> {updated_character['rarity']}\n<b>ID:</b> {updated_character['id']}\nUpdated by <a href='tg://user?id={update.effective_user.id}'>{update.effective_user.first_name}</a>",
+                    parse_mode='HTML'
+                )
+        except Exception:
+            await update.message.reply_text("Field updated in DB, but failed to update channel message.")
 
         await update.message.reply_text('Character updated successfully.')
     except Exception as e:
-        await update.message.reply_text('Update failed. Check if bot has channel permissions or if ID is valid.')
+        await update.message.reply_text(f'Update failed. Error: {str(e)}')
 
+# Register command handlers
 UPLOAD_HANDLER = CommandHandler('upload', upload, block=False)
 DELETE_HANDLER = CommandHandler('delete', delete, block=False)
 UPDATE_HANDLER = CommandHandler('update', update_char, block=False)
