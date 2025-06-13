@@ -1,5 +1,6 @@
 import asyncio
 from pyrogram import filters, Client, types as t
+from pyrogram.types import Message
 from shivu import shivuu as bot
 from shivu import user_collection, collection
 import time
