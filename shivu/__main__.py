@@ -6,6 +6,7 @@ import asyncio
 from html import escape
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from functools import wraps
 from telegram.ext import CommandHandler, CallbackContext, MessageHandler, filters
 
 from shivu import (
@@ -17,7 +18,8 @@ from shivu.modules import ALL_MODULES
 # Dynamically import all modules
 for module_name in ALL_MODULES:
     importlib.import_module("shivu.modules." + module_name)
-
+    
+gban_collection = shivuu.db.gban_collection
 locks = {}
 message_counts = {}
 last_characters = {}
@@ -42,10 +44,23 @@ RARITY_THRESHOLDS = {
     "🌫️ Mist": 2000
 }
 
+def gban_protected(func):
+    @wraps(func)
+    async def wrapped(update: Update, context: CallbackContext, *args, **kwargs):
+        user_id = update.effective_user.id
+        if await is_user_banned(user_id):
+            return  # user banned hai, kuch mat karo
+        return await func(update, context, *args, **kwargs)
+    return wrapped
+
 def escape_markdown(text):
     escape_chars = r'\*_`\\~>#+-=|{}.!'
     return re.sub(r'([%s])' % re.escape(escape_chars), r'\\\1', text)
 
+async def is_user_banned(user_id: int) -> bool:
+    banned = await gban_collection.find_one({'user_id': user_id})
+    return bool(banned)
+@gban_protected
 async def message_counter(update: Update, context: CallbackContext) -> None:
     chat_id = str(update.effective_chat.id)
     user_id = update.effective_user.id
@@ -75,7 +90,7 @@ async def message_counter(update: Update, context: CallbackContext) -> None:
             message_counts[chat_id] = 0
             await send_image(update, context)
 
-async def send_image(update: Update, context: CallbackContext) -> None:
+async def sendimage(update: Update, context: CallbackContext) -> None:
     chat_id = update.effective_chat.id
     all_characters = list(await collection.find({}).to_list(length=None))
 
@@ -104,7 +119,7 @@ async def send_image(update: Update, context: CallbackContext) -> None:
         caption=f"A New {character['rarity']} Character Appeared...\n/guess Character Name and add in Your Harem",
         parse_mode='Markdown'
     )
-
+@gban_protected
 async def guess(update: Update, context: CallbackContext) -> None:
     chat_id = update.effective_chat.id
     user_id = update.effective_user.id
@@ -164,7 +179,7 @@ async def guess(update: Update, context: CallbackContext) -> None:
         )
     else:
         await update.message.reply_text("❌ Please write correct character name.")
-
+@gban_protected
 async def fav(update: Update, context: CallbackContext) -> None:
     user_id = update.effective_user.id
     if not context.args:
