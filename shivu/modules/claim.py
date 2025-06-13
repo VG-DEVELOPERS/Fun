@@ -66,7 +66,7 @@ async def hclaim(_, message: t.Message):
 
 from pyrogram import Client, filters
 from pyrogram.types import Message
-from config import collection, user_collection  # Your MongoDB collections
+from shivu import collection, user_collection  # Your MongoDB collections
 from pyrogram.errors import PeerIdInvalid
 
 @Client.on_message(filters.command("hfind"))
