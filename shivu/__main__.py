@@ -11,7 +11,7 @@ from telegram.ext import CommandHandler, CallbackContext, MessageHandler, filter
 
 from shivu import (
     collection, top_global_groups_collection, group_user_totals_collection,
-    user_collection, user_totals_collection, shivuu, application, LOGGER
+    user_collection, user_totals_collection, shivuu, application, LOGGER, gban_collection
 )
 from shivu.modules import ALL_MODULES
 
@@ -19,7 +19,7 @@ from shivu.modules import ALL_MODULES
 for module_name in ALL_MODULES:
     importlib.import_module("shivu.modules." + module_name)
     
-gban_collection = shivuu.db.gban_collection
+
 locks = {}
 message_counts = {}
 last_characters = {}
