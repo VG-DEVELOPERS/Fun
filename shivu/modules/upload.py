@@ -63,7 +63,7 @@ async def get_next_sequence_number(sequence_name):
         return 0
     return sequence_document['sequence_value']
 
-# /upload command
+# upload command 
 async def upload(update: Update, context: CallbackContext) -> None:
     if str(update.effective_user.id) not in sudo_users:
         await update.message.reply_text('Ask My Sensei...')
@@ -75,44 +75,50 @@ async def upload(update: Update, context: CallbackContext) -> None:
             await update.message.reply_text(WRONG_FORMAT_TEXT)
             return
 
-        # Initialize file-related variables
         file_url = None
         file_type = None  # "photo" or "video"
 
-        # If it's a reply with a photo or video
+        # Handle reply media
         if update.message.reply_to_message:
             reply = update.message.reply_to_message
             if reply.photo:
                 file = reply.photo[-1]
+                file_url = file.file_id
                 file_type = "photo"
             elif reply.video:
                 file = reply.video
+                file_url = file.file_id
+                file_type = "video"
+            elif reply.document and reply.document.mime_type and reply.document.mime_type.startswith("video/"):
+                file = reply.document
+                file_url = file.file_id
                 file_type = "video"
             else:
-                await update.message.reply_text("Replied message must contain an image or video.")
+                await update.message.reply_text("Replied message must contain an image or a video (.mp4).")
                 return
-            file_url = file.file_id
+            offset = 0
         else:
-            # Original format with URL
+            # Handle direct URL input
             file_url = args[0]
             if not is_valid_url(file_url):
                 await update.message.reply_text('Invalid URL.')
                 return
             file_type = "photo"
+            offset = 1
 
         # Parse character info
-        offset = 0 if update.message.reply_to_message else 1
         character_name = args[0 + offset].replace('-', ' ').title()
         anime = args[1 + offset].replace('-', ' ').title()
-
         try:
             rarity = RARITY_MAP[int(args[2 + offset])]
         except KeyError:
             await update.message.reply_text('Invalid rarity. Please use numbers from 1 to 13.')
             return
 
+        # Generate unique ID
         char_id = str(await get_next_sequence_number('character_id')).zfill(2)
 
+        # Create DB entry
         character = {
             'media_type': file_type,
             'file_id': file_url,
@@ -123,25 +129,35 @@ async def upload(update: Update, context: CallbackContext) -> None:
         }
 
         # Send to channel
+        caption = (
+            f'<b>Character Name:</b> {character_name}\n'
+            f'<b>Anime Name:</b> {anime}\n'
+            f'<b>Rarity:</b> {rarity}\n'
+            f'<b>ID:</b> {char_id}\n'
+            f'Added by <a href="tg://user?id={update.effective_user.id}">'
+            f'{update.effective_user.first_name}</a>'
+        )
+
         try:
             if file_type == "photo":
-                message = await context.bot.send_photo(
+                msg = await context.bot.send_photo(
                     chat_id=CHARA_CHANNEL_ID,
                     photo=file_url,
-                    caption=f'<b>Character Name:</b> {character_name}\n<b>Anime Name:</b> {anime}\n<b>Rarity:</b> {rarity}\n<b>ID:</b> {char_id}\nAdded by <a href="tg://user?id={update.effective_user.id}">{update.effective_user.first_name}</a>',
+                    caption=caption,
                     parse_mode='HTML'
                 )
-            else:
-                message = await context.bot.send_video(
+            else:  # video
+                msg = await context.bot.send_video(
                     chat_id=CHARA_CHANNEL_ID,
                     video=file_url,
-                    caption=f'<b>Character Name:</b> {character_name}\n<b>Anime Name:</b> {anime}\n<b>Rarity:</b> {rarity}\n<b>ID:</b> {char_id}\nAdded by <a href="tg://user?id={update.effective_user.id}">{update.effective_user.first_name}</a>',
+                    caption=caption,
                     parse_mode='HTML'
                 )
 
-            character['message_id'] = message.message_id
+            character['message_id'] = msg.message_id
             await collection.insert_one(character)
             await update.message.reply_text('Character added successfully.')
+
         except Exception:
             await collection.insert_one(character)
             await update.message.reply_text("Character added, but failed to send to channel.")
