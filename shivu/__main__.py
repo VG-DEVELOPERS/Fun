@@ -44,14 +44,7 @@ RARITY_THRESHOLDS = {
     "🌫️ Mist": 2000
 }
 
-def gban_protected(func):
-    @wraps(func)
-    async def wrapped(update: Update, context: CallbackContext, *args, **kwargs):
-        user_id = update.effective_user.id
-        if await is_user_banned(user_id):
-            return  # user banned hai, kuch mat karo
-        return await func(update, context, *args, **kwargs)
-    return wrapped
+
 
 def escape_markdown(text):
     escape_chars = r'\*_`\\~>#+-=|{}.!'
@@ -60,7 +53,7 @@ def escape_markdown(text):
 async def is_user_banned(user_id: int) -> bool:
     banned = await gban_collection.find_one({'user_id': user_id})
     return bool(banned)
-@gban_protected
+
 async def message_counter(update: Update, context: CallbackContext) -> None:
     chat_id = str(update.effective_chat.id)
     user_id = update.effective_user.id
@@ -119,7 +112,7 @@ async def sendimage(update: Update, context: CallbackContext) -> None:
         caption=f"A New {character['rarity']} Character Appeared...\n/guess Character Name and add in Your Harem",
         parse_mode='Markdown'
     )
-@gban_protected
+
 async def guess(update: Update, context: CallbackContext) -> None:
     chat_id = update.effective_chat.id
     user_id = update.effective_user.id
@@ -179,7 +172,7 @@ async def guess(update: Update, context: CallbackContext) -> None:
         )
     else:
         await update.message.reply_text("❌ Please write correct character name.")
-@gban_protected
+
 async def fav(update: Update, context: CallbackContext) -> None:
     user_id = update.effective_user.id
     if not context.args:
