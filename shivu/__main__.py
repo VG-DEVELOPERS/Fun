@@ -50,9 +50,6 @@ def escape_markdown(text):
     escape_chars = r'\*_`\\~>#+-=|{}.!'
     return re.sub(r'([%s])' % re.escape(escape_chars), r'\\\1', text)
 
-async def is_user_banned(user_id: int) -> bool:
-    banned = await gban_collection.find_one({'user_id': user_id})
-    return bool(banned)
 
 async def message_counter(update: Update, context: CallbackContext) -> None:
     chat_id = str(update.effective_chat.id)
