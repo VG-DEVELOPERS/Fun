@@ -64,17 +64,17 @@ async def hclaim(_, message: t.Message):
         print(e)
 
 @bot.on_message(filters.command(["hfind"]))
-async def hfind(_, message: t.Message):
+async def hfind(_, message: Message):
     if len(message.command) < 2:
-        return await message.reply_text("🔖𝑷𝒍𝒆𝒂𝒔𝒆 𝒑𝒓𝒐𝒗𝒊𝒅𝒆 𝒕𝒉𝒆 𝑰𝑫 ☘️", quote=True)
+        return await message.reply_text("🔖 Please provide the ID ☘️", quote=True)
     
     waifu_id = message.command[1]
     waifu = await collection.find_one({'id': waifu_id})
-    
+
     if not waifu:
-        return await message.reply_text("🎗️ 𝑵𝒐  𝒇𝒐𝒖𝒏𝒅 𝒘𝒊𝒕𝒉 𝒕𝒉𝒂𝒕 𝑰𝑫 ❌", quote=True)
-    
-    # Get the top 10 users with the most of this waifu in the current chat
+        return await message.reply_text("🎗️ No character found with that ID ❌", quote=True)
+
+    # Fetch top collectors
     top_users = await user_collection.aggregate([
         {'$match': {'characters.id': waifu_id}},
         {'$unwind': '$characters'},
@@ -83,36 +83,40 @@ async def hfind(_, message: t.Message):
         {'$sort': {'count': -1}},
         {'$limit': 10}
     ]).to_list(length=10)
-    
-    # Get the usernames of the top users
+
     usernames = []
     for user_info in top_users:
         user_id = user_info['_id']
         try:
             user = await bot.get_users(user_id)
-            usernames.append(user.username if user.username else f"➥ {user_id}")
-        except Exception as e:
-            print(e)
+            usernames.append(f"@{user.username}" if user.username else f"➥ {user_id}")
+        except Exception:
             usernames.append(f"➥ {user_id}")
-    
-    # Construct the caption
+
     caption = (
         f"🧩 𝑰𝒏𝒇𝒐𝒓𝒎𝒂𝒕𝒊𝒐𝒏:\n"
         f"🪭 𝑵𝒂𝒎𝒆: {waifu['name']}\n"
-
-f"⚕️ 𝑹𝒂𝒓𝒊𝒕𝒚: {waifu['rarity']}\n"
+        f"⚕️ 𝑹𝒂𝒓𝒊𝒕𝒚: {waifu['rarity']}\n"
         f"⚜️ 𝑨𝒏𝒊𝒎𝒆: {waifu['anime']}\n"
         f"🪅 𝑰𝑫: {waifu['id']}\n\n"
-        f"✳️ 𝑯𝒆𝒓𝒆 𝒊𝒔 𝒕𝒉𝒆 𝒍𝒊𝒔𝒕 𝒐𝒇 𝒖𝒔𝒆𝒓𝒔 𝒘𝒉𝒐 𝒉𝒂𝒗𝒆 𝒕𝒉𝒊𝒔 𝒄𝒉𝒂𝒓𝒂𝒄𝒕𝒆𝒓 〽️:\n\n"
+        f"✳️ 𝑻𝒐𝒑 𝑼𝒔𝒆𝒓𝒔 𝒘𝒊𝒕𝒉 𝒕𝒉𝒊𝒔 𝒘𝒂𝒊𝒇𝒖:\n\n"
     )
-    for i, user_info in enumerate(top_users):
-        count = user_info['count']
-        username = usernames[i]
-        caption += f"{i + 1}. {username} x{count}\n"
-    
-    # Reply with the waifu information and top users
-    await message.reply_photo(photo=waifu['img_url'], caption=caption)
 
+    for i, user_info in enumerate(top_users):
+        caption += f"{i+1}. {usernames[i]} x{user_info['count']}\n"
+
+    # Detect media
+    file = waifu.get('file_id') or waifu.get('img_url')
+    media_type = waifu.get('media_type', 'photo')
+
+    if not file:
+        return await message.reply_text("⚠️ No image or video found for this character.")
+
+    if media_type == "video":
+        await message.reply_video(video=file, caption=caption)
+    else:
+        await message.reply_photo(photo=file, caption=caption)
+        
 @bot.on_message(filters.command(["cfind"]))
 async def cfind(_, message: t.Message):
     if len(message.command) < 2:
