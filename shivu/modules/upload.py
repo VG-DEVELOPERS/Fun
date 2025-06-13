@@ -71,20 +71,42 @@ async def upload(update: Update, context: CallbackContext) -> None:
 
     try:
         args = context.args
-        if len(args) != 4:
+        if len(args) != 3 and len(args) != 4:
             await update.message.reply_text(WRONG_FORMAT_TEXT)
             return
 
-        image_url = args[0]
-        if not is_valid_url(image_url):
-            await update.message.reply_text('Invalid URL.')
-            return
+        # Initialize file-related variables
+        file_url = None
+        file_type = None  # "photo" or "video"
 
-        character_name = args[1].replace('-', ' ').title()
-        anime = args[2].replace('-', ' ').title()
+        # If it's a reply with a photo or video
+        if update.message.reply_to_message:
+            reply = update.message.reply_to_message
+            if reply.photo:
+                file = reply.photo[-1]
+                file_type = "photo"
+            elif reply.video:
+                file = reply.video
+                file_type = "video"
+            else:
+                await update.message.reply_text("Replied message must contain an image or video.")
+                return
+            file_url = file.file_id
+        else:
+            # Original format with URL
+            file_url = args[0]
+            if not is_valid_url(file_url):
+                await update.message.reply_text('Invalid URL.')
+                return
+            file_type = "photo"
+
+        # Parse character info
+        offset = 0 if update.message.reply_to_message else 1
+        character_name = args[0 + offset].replace('-', ' ').title()
+        anime = args[1 + offset].replace('-', ' ').title()
 
         try:
-            rarity = RARITY_MAP[int(args[3])]
+            rarity = RARITY_MAP[int(args[2 + offset])]
         except KeyError:
             await update.message.reply_text('Invalid rarity. Please use numbers from 1 to 13.')
             return
@@ -92,28 +114,41 @@ async def upload(update: Update, context: CallbackContext) -> None:
         char_id = str(await get_next_sequence_number('character_id')).zfill(2)
 
         character = {
-            'img_url': image_url,
+            'media_type': file_type,
+            'file_id': file_url,
             'name': character_name,
             'anime': anime,
             'rarity': rarity,
             'id': char_id
         }
 
+        # Send to channel
         try:
-            message = await context.bot.send_photo(
-                chat_id=CHARA_CHANNEL_ID,
-                photo=image_url,
-                caption=f'<b>Character Name:</b> {character_name}\n<b>Anime Name:</b> {anime}\n<b>Rarity:</b> {rarity}\n<b>ID:</b> {char_id}\nAdded by <a href="tg://user?id={update.effective_user.id}">{update.effective_user.first_name}</a>',
-                parse_mode='HTML'
-            )
+            if file_type == "photo":
+                message = await context.bot.send_photo(
+                    chat_id=CHARA_CHANNEL_ID,
+                    photo=file_url,
+                    caption=f'<b>Character Name:</b> {character_name}\n<b>Anime Name:</b> {anime}\n<b>Rarity:</b> {rarity}\n<b>ID:</b> {char_id}\nAdded by <a href="tg://user?id={update.effective_user.id}">{update.effective_user.first_name}</a>',
+                    parse_mode='HTML'
+                )
+            else:
+                message = await context.bot.send_video(
+                    chat_id=CHARA_CHANNEL_ID,
+                    video=file_url,
+                    caption=f'<b>Character Name:</b> {character_name}\n<b>Anime Name:</b> {anime}\n<b>Rarity:</b> {rarity}\n<b>ID:</b> {char_id}\nAdded by <a href="tg://user?id={update.effective_user.id}">{update.effective_user.first_name}</a>',
+                    parse_mode='HTML'
+                )
+
             character['message_id'] = message.message_id
             await collection.insert_one(character)
             await update.message.reply_text('Character added successfully.')
-        except:
+        except Exception:
             await collection.insert_one(character)
-            await update.message.reply_text("Character added, but unable to send to channel.")
+            await update.message.reply_text("Character added, but failed to send to channel.")
+
     except Exception as e:
         await update.message.reply_text(f'Upload failed. Error: {str(e)}\nContact support: {SUPPORT_CHAT}')
+        
 
 # /delete command
 async def delete(update: Update, context: CallbackContext) -> None:
