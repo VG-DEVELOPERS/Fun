@@ -1,45 +1,42 @@
-from pyrogram import Client, filters
-from pyrogram.types import Message
-from shivu import collection  # MongoDB collection you store characters in
+from telegram import Update
+from telegram.ext import CommandHandler, CallbackContext
+from shivu import collection, application 
 
-@Client.on_message(filters.command("find"))
-async def find_character(client: Client, message: Message):
-    if len(message.command) < 2:
-        return await message.reply_text("❗ Please provide a character ID.")
+async def find_char(update: Update, context: CallbackContext) -> None:
+    if len(context.args) != 1:
+        await update.message.reply_text("Please provide the character ID.\nExample: /find 01")
+        return
 
-    char_id = message.command[1]
-
-    try:
-        character = await collection.find_one({"id": char_id})
-    except Exception as e:
-        return await message.reply_text(f"❌ Database error: {e}")
+    char_id = context.args[0]
+    character = await collection.find_one({"id": char_id})
 
     if not character:
-        return await message.reply_text("❌ No character found with that ID.")
+        await update.message.reply_text("❌ Character not found.")
+        return
 
-    name = character.get("name", "N/A")
-    anime = character.get("anime", "N/A")
-    rarity = character.get("rarity", "N/A")
-    media_type = character.get("media_type", "photo")
+    name = character.get("name", "Unknown")
+    anime = character.get("anime", "Unknown")
+    rarity = character.get("rarity", "Unknown")
     file_id = character.get("file_id") or character.get("img_url")
+    media_type = character.get("media_type", "photo")
 
     caption = (
-        f"🧩 <b>Character Info:</b>\n"
-        f"🪭 <b>Name:</b> {name}\n"
-        f"⚜️ <b>Anime:</b> {anime}\n"
-        f"✨ <b>Rarity:</b> {rarity}\n"
-        f"🪅 <b>ID:</b> {char_id}"
+        f"<b>🧩 Character Info</b>\n"
+        f"<b>🪭 Name:</b> {name}\n"
+        f"<b>⚜️ Anime:</b> {anime}\n"
+        f"<b>✨ Rarity:</b> {rarity}\n"
+        f"<b>🆔 ID:</b> {char_id}"
     )
-
-    if not file_id:
-        return await message.reply_text("⚠️ No media associated with this character.")
 
     try:
         if media_type == "photo":
-            await message.reply_photo(file_id, caption=caption, parse_mode="html")
+            await update.message.reply_photo(photo=file_id, caption=caption, parse_mode="HTML")
         elif media_type == "video":
-            await message.reply_video(file_id, caption=caption, parse_mode="html")
+            await update.message.reply_video(video=file_id, caption=caption, parse_mode="HTML")
         else:
-            await message.reply_text(caption, parse_mode="html")
+            await update.message.reply_text(caption, parse_mode="HTML")
     except Exception as e:
-        await message.reply_text(f"⚠️ Failed to send media.\n\n{e}")
+        await update.message.reply_text(f"⚠️ Error sending media: {e}")
+        
+FIND_HANDLER = CommandHandler('fnd', find_char, block=False)
+application.add_handler(FIND_HANDLER)
