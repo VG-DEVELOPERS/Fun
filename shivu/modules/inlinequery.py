@@ -7,48 +7,47 @@ from telegram import Update, InlineQueryResultPhoto
 from telegram.ext import InlineQueryHandler, CallbackContext
 from shivu import user_collection, collection, application
 
-# MongoDB indexes
+# Create indexes
 collection.create_index([('id', ASCENDING)])
 collection.create_index([('anime', ASCENDING)])
 collection.create_index([('img_url', ASCENDING)])
 user_collection.create_index([('characters.id', ASCENDING)])
 
-# Caching
+# Caches
 all_characters_cache = TTLCache(maxsize=10000, ttl=36000)
 user_collection_cache = TTLCache(maxsize=10000, ttl=60)
 
-# Skin/Theme Emojis (emoji only, no rarity tags like "limited")
-THEME_EMOJIS = {
-    "beach": "🏖️", "maid": "🧹", "basketball": "🏀", "bride": "💍", "arabian desert": "🏜️",
-    "sword": "🗡️", "butterfly": "🦋", "dragon": "🐉", "bunny": "🐰", "school": "🎒",
-    "kimono": "👘", "flowers": "🌼", "dancer": "💃", "wings": "🪽", "chocolate": "🍫",
-    "doctor": "💉", "bath": "🛁"
+# Skin themes
+THEMES = {
+    "beach": "🏖️", "maid": "🧹", "basketball": "🏀", "bride": "💍",
+    "arabian": "🏜️", "sword": "🗡️", "butterfly": "🦋", "dragon": "🐉",
+    "bunny": "🐰", "school": "🎒", "kimono": "👘", "flowers": "🌼",
+    "dancer": "💃", "wings": "🪽", "chocolate": "🍫", "doctor": "💉", "bath": "🛁"
 }
 
-# Format character name with emoji theme if matched
-def format_character_name(name: str) -> str:
+# Format character name and extract theme line
+def format_character_name(name: str) -> tuple[str, str | None]:
     lower_name = name.lower()
-    for keyword, emoji in THEME_EMOJIS.items():
-        if keyword in lower_name:
-            base = name.split("-")[0]
-            return f"{base}-[{emoji}]"
-    return name
+    for theme, emoji in THEMES.items():
+        if theme in lower_name:
+            base_name = name.split("-")[0].strip()
+            return f"{base_name} [{emoji}]", f"{emoji}{theme}{emoji}"
+    return name, None
 
 # Inline query handler
 async def inlinequery(update: Update, context: CallbackContext) -> None:
     query = update.inline_query.query
     offset = int(update.inline_query.offset or 0)
+
     characters = []
     user_data = None
 
-    # 1. No query — show all characters (cached)
     if not query:
-        characters = all_characters_cache.get('all_characters')
+        characters = all_characters_cache.get('all')
         if not characters:
             characters = await collection.find({}, {'_id': 0}).to_list(length=None)
-            all_characters_cache['all_characters'] = characters
+            all_characters_cache['all'] = characters
 
-    # 2. User collection (collection.user_id optional search)
     elif query.startswith("collection."):
         user_id = query.split(" ")[0].split(".")[1]
         search_terms = " ".join(query.split(" ")[1:])
@@ -65,23 +64,22 @@ async def inlinequery(update: Update, context: CallbackContext) -> None:
                 regex = re.compile(search_terms, re.IGNORECASE)
                 characters = [c for c in characters if regex.search(c['name']) or regex.search(c['anime'])]
 
-    # 3. Normal query (search by ID, name, or anime)
     else:
         try:
             query_id = int(query)
             characters = await collection.find({'id': query_id}).to_list(length=50)
         except ValueError:
             regex = re.compile(re.escape(query), re.IGNORECASE)
-            characters = await collection.find(
-                {"$or": [{"name": regex}, {"anime": regex}]}
-            ).to_list(length=50)
+            characters = await collection.find({
+                "$or": [{"name": regex}, {"anime": regex}]
+            }).to_list(length=50)
 
     results = []
     page = characters[offset:offset + 50]
     next_offset = str(offset + 50) if len(page) == 50 else ""
 
     for character in page:
-        formatted_name = format_character_name(character['name'])
+        formatted_name, theme_line = format_character_name(character['name'])
 
         if user_data:
             user_count = sum(c['id'] == character['id'] for c in user_data['characters'])
@@ -104,6 +102,9 @@ async def inlinequery(update: Update, context: CallbackContext) -> None:
                 f"🔔 <b>Rarity:</b> {character['rarity']}"
             )
 
+        if theme_line:
+            caption += f"\n\n{theme_line}"
+
         results.append(
             InlineQueryResultPhoto(
                 id=f"{character['id']}_{int(time.time() * 1000)}",
@@ -116,5 +117,6 @@ async def inlinequery(update: Update, context: CallbackContext) -> None:
 
     await update.inline_query.answer(results, next_offset=next_offset, cache_time=5)
 
-# Register handler
+# Register inline handler
 application.add_handler(InlineQueryHandler(inlinequery, block=False))
+                
