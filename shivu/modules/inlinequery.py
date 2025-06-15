@@ -13,38 +13,42 @@ collection.create_index([('anime', ASCENDING)])
 collection.create_index([('img_url', ASCENDING)])
 user_collection.create_index([('characters.id', ASCENDING)])
 
-# Caches
+# Caching
 all_characters_cache = TTLCache(maxsize=10000, ttl=36000)
 user_collection_cache = TTLCache(maxsize=10000, ttl=60)
 
-# Skin formatter
+# Skin/Theme Emojis (emoji only, no rarity tags like "limited")
+THEME_EMOJIS = {
+    "beach": "🏖️", "maid": "🧹", "basketball": "🏀", "bride": "💍", "arabian desert": "🏜️",
+    "sword": "🗡️", "butterfly": "🦋", "dragon": "🐉", "bunny": "🐰", "school": "🎒",
+    "kimono": "👘", "flowers": "🌼", "dancer": "💃", "wings": "🪽", "chocolate": "🍫",
+    "doctor": "💉", "bath": "🛁"
+}
+
+# Format character name with emoji theme if matched
 def format_character_name(name: str) -> str:
-    skins = {
-        "🏖️": "𝒃𝒆𝒂𝒄𝒉", "👘": "𝑲𝒊𝒎𝒐𝒏𝒐", "🧹": "𝑴𝒂𝒊𝒅", "🏀": "𝑩𝒂𝒔𝒌𝒆𝒕𝒃𝒂𝒍𝒍",
-        "💍": "𝑩𝒓𝒊𝒅𝒆", "🏜️": "𝑨𝒓𝒂𝒃𝒊𝒂𝒏", "🗡️": "𝑺𝒘𝒐𝒓𝒅", "🦋": "𝑩𝒖𝒕𝒕𝒆𝒓𝒇𝒍𝒚",
-        "🐉": "𝑫𝒓𝒂𝒈𝒐𝒏", "🐰": "𝑩𝒖𝒏𝒏𝒚", "🎒": "𝑺𝒄𝒉𝒐𝒐𝒍", "🌼": "𝑭𝒍𝒐𝒘𝒆𝒓𝒔"
-    }
-    for emoji, styled in skins.items():
-        if emoji in name:
+    lower_name = name.lower()
+    for keyword, emoji in THEME_EMOJIS.items():
+        if keyword in lower_name:
             base = name.split("-")[0]
-            return f"{base}-[{emoji}{styled}{emoji}]"
+            return f"{base}-[{emoji}]"
     return name
 
-# Main inline handler
+# Inline query handler
 async def inlinequery(update: Update, context: CallbackContext) -> None:
     query = update.inline_query.query
     offset = int(update.inline_query.offset or 0)
-
     characters = []
     user_data = None
 
-    # Use collection cache when no query
+    # 1. No query — show all characters (cached)
     if not query:
         characters = all_characters_cache.get('all_characters')
         if not characters:
             characters = await collection.find({}, {'_id': 0}).to_list(length=None)
             all_characters_cache['all_characters'] = characters
 
+    # 2. User collection (collection.user_id optional search)
     elif query.startswith("collection."):
         user_id = query.split(" ")[0].split(".")[1]
         search_terms = " ".join(query.split(" ")[1:])
@@ -61,6 +65,7 @@ async def inlinequery(update: Update, context: CallbackContext) -> None:
                 regex = re.compile(search_terms, re.IGNORECASE)
                 characters = [c for c in characters if regex.search(c['name']) or regex.search(c['anime'])]
 
+    # 3. Normal query (search by ID, name, or anime)
     else:
         try:
             query_id = int(query)
@@ -91,7 +96,6 @@ async def inlinequery(update: Update, context: CallbackContext) -> None:
                 f"📦 <b>Your Anime Collection:</b> {owned_anime} / ?"
             )
         else:
-            # REMOVE global count call (slow), or cache it externally if needed
             caption = (
                 f"💸 <b>New Character Picked!</b>\n\n"
                 f"🍂 <b>Name:</b> {escape(formatted_name)}\n"
@@ -111,7 +115,6 @@ async def inlinequery(update: Update, context: CallbackContext) -> None:
         )
 
     await update.inline_query.answer(results, next_offset=next_offset, cache_time=5)
-    
+
 # Register handler
 application.add_handler(InlineQueryHandler(inlinequery, block=False))
-    
