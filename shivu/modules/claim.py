@@ -67,7 +67,7 @@ async def hclaim(_, message: t.Message):
 from pyrogram import Client, filters
 from pyrogram.types import Message
 from pyrogram.errors import PeerIdInvalid
-from config import collection, user_collection  # Adjust if needed
+from shivu import collection, user_collection  # Adjust if needed
 
 @Client.on_message(filters.command("hfind"))
 async def hfind_handler(client: Client, message: Message):
