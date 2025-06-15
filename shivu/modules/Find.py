@@ -38,5 +38,5 @@ async def find_char(update: Update, context: CallbackContext) -> None:
     except Exception as e:
         await update.message.reply_text(f"⚠️ Error sending media: {e}")
         
-FIND_HANDLER = CommandHandler('fnd', find_char, block=False)
+FIND_HANDLER = CommandHandler('find', find_char, block=False)
 application.add_handler(FIND_HANDLER)
