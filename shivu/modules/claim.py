@@ -66,11 +66,11 @@ async def hclaim(_, message: t.Message):
 
 from pyrogram import Client, filters
 from pyrogram.types import Message
-from shivu import collection, user_collection  # Your MongoDB collections
 from pyrogram.errors import PeerIdInvalid
+from config import collection, user_collection  # Adjust if needed
 
 @Client.on_message(filters.command("hfind"))
-async def hfind(_, message: Message):
+async def hfind_handler(client: Client, message: Message):
     if len(message.command) < 2:
         return await message.reply_text("🔖 𝑷𝒍𝒆𝒂𝒔𝒆 𝒑𝒓𝒐𝒗𝒊𝒅𝒆 𝒕𝒉𝒆 𝑰𝑫 ☘️", quote=True)
 
@@ -80,59 +80,60 @@ async def hfind(_, message: Message):
     if not waifu:
         return await message.reply_text("🎗️ 𝑵𝒐 𝒄𝒉𝒂𝒓𝒂𝒄𝒕𝒆𝒓 𝒇𝒐𝒖𝒏𝒅 𝒘𝒊𝒕𝒉 𝒕𝒉𝒂𝒕 𝑰𝑫 ❌", quote=True)
 
-    # Top 10 users with this waifu
+    # Fetch top 10 users with the waifu
     top_users = await user_collection.aggregate([
-        {'$match': {'characters.id': waifu_id}},
-        {'$unwind': '$characters'},
-        {'$match': {'characters.id': waifu_id}},
-        {'$group': {'_id': '$id', 'count': {'$sum': 1}}},
-        {'$sort': {'count': -1}},
-        {'$limit': 10}
+        {"$match": {"characters.id": waifu_id}},
+        {"$unwind": "$characters"},
+        {"$match": {"characters.id": waifu_id}},
+        {"$group": {"_id": "$id", "count": {"$sum": 1}}},
+        {"$sort": {"count": -1}},
+        {"$limit": 10}
     ]).to_list(length=10)
 
     usernames = []
     for user_info in top_users:
         user_id = user_info['_id']
         try:
-            user = await _.get_users(user_id)
-            usernames.append(f"@{user.username}" if user.username else f"➥ {user.first_name}")
+            user = await client.get_users(user_id)
+            if user.username:
+                usernames.append(f"@{user.username}")
+            else:
+                usernames.append(f"{user.first_name} ({user_id})")
         except PeerIdInvalid:
-            usernames.append(f"➥ {user_id}")
+            usernames.append(f"Unknown ({user_id})")
         except Exception as e:
-            print(f"Error fetching user {user_id}: {e}")
-            usernames.append(f"➥ {user_id}")
+            print(f"Error getting user {user_id}: {e}")
+            usernames.append(f"Unknown ({user_id})")
 
-    # Caption
+    # Caption formatting
     caption = (
         f"🧩 𝑰𝒏𝒇𝒐𝒓𝒎𝒂𝒕𝒊𝒐𝒏:\n"
-        f"🪭 𝑵𝒂𝒎𝒆: {waifu['name']}\n"
-        f"⚕️ 𝑹𝒂𝒓𝒊𝒕𝒚: {waifu['rarity']}\n"
-        f"⚜️ 𝑨𝒏𝒊𝒎𝒆: {waifu['anime']}\n"
-        f"🪅 𝑰𝑫: {waifu['id']}\n\n"
-        f"✳️ 𝑯𝒆𝒓𝒆 𝒂𝒓𝒆 𝒕𝒐𝒑 𝒖𝒔𝒆𝒓𝒔 𝒘𝒊𝒕𝒉 𝒕𝒉𝒊𝒔 𝒄𝒉𝒂𝒓𝒂𝒄𝒕𝒆𝒓:\n"
+        f"🪭 𝑵𝒂𝒎𝒆: {waifu.get('name', 'N/A')}\n"
+        f"⚕️ 𝑹𝒂𝒓𝒊𝒕𝒚: {waifu.get('rarity', 'N/A')}\n"
+        f"⚜️ 𝑨𝒏𝒊𝒎𝒆: {waifu.get('anime', 'N/A')}\n"
+        f"🪅 𝑰𝑫: {waifu.get('id', 'N/A')}\n\n"
+        f"✳️ 𝑻𝒐𝒑 𝒖𝒔𝒆𝒓𝒔 𝒘𝒊𝒕𝒉 𝒕𝒉𝒊𝒔 𝒘𝒂𝒊𝒇𝒖:\n"
     )
 
     for i, user_info in enumerate(top_users):
-        username = usernames[i]
-        count = user_info['count']
-        caption += f"{i+1}. {username} x{count}\n"
+        caption += f"{i + 1}. {usernames[i]} x{user_info['count']}\n"
 
-    # Determine file type
-    file_type = waifu.get("media_type", "photo")
+    # Handle media display
+    media_type = waifu.get("media_type", "photo")
     file_id = waifu.get("file_id") or waifu.get("img_url")
 
     if not file_id:
-        return await message.reply_text("❌ No media found for this character.", quote=True)
+        return await message.reply_text("⚠️ No media found for this character.")
 
     try:
-        if file_type == "photo":
+        if media_type == "photo":
             await message.reply_photo(photo=file_id, caption=caption)
-        elif file_type == "video":
+        elif media_type == "video":
             await message.reply_video(video=file_id, caption=caption)
         else:
-            await message.reply_text("❌ Unknown media type.")
+            await message.reply_text(caption)  # fallback if unknown media
     except Exception as e:
-        await message.reply_text(f"⚠️ Failed to send media.\n\n{str(e)}")
+        await message.reply_text(f"⚠️ Failed to send media.\n\n{e}")
         
     
 @bot.on_message(filters.command(["cfind"]))
