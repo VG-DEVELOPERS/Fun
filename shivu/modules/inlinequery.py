@@ -38,34 +38,38 @@ async def inlinequery(update: Update, context: CallbackContext) -> None:
     characters = []
     user_data = None
 
-    # Check for user collection search
-    if query.startswith("collection."):
-        user_id, *search_terms = query.split(" ")[0].split(".")[1], " ".join(query.split(" ")[1:])
+    # Use collection cache when no query
+    if not query:
+        characters = all_characters_cache.get('all_characters')
+        if not characters:
+            characters = await collection.find({}, {'_id': 0}).to_list(length=None)
+            all_characters_cache['all_characters'] = characters
+
+    elif query.startswith("collection."):
+        user_id = query.split(" ")[0].split(".")[1]
+        search_terms = " ".join(query.split(" ")[1:])
         user_data = user_collection_cache.get(user_id)
+
         if not user_data:
-            user_data = await user_collection.find_one({'id': int(user_id)})
-            user_collection_cache[user_id] = user_data
+            user_data = await user_collection.find_one({'id': int(user_id)}, {'characters': 1})
+            if user_data:
+                user_collection_cache[user_id] = user_data
 
         if user_data:
             characters = list({c['id']: c for c in user_data.get('characters', [])}.values())
             if search_terms:
                 regex = re.compile(search_terms, re.IGNORECASE)
-                characters = [c for c in characters if regex.search(c['name']) or regex.search(c['anime']) or regex.search(str(c['id']))]
+                characters = [c for c in characters if regex.search(c['name']) or regex.search(c['anime'])]
 
     else:
-        # Public search by name, anime or ID
-        if query:
+        try:
+            query_id = int(query)
+            characters = await collection.find({'id': query_id}).to_list(length=50)
+        except ValueError:
             regex = re.compile(re.escape(query), re.IGNORECASE)
-            try:
-                query_id = int(query)
-                characters = await collection.find({'id': query_id}).to_list(length=50)
-            except ValueError:
-                characters = await collection.find({"$or": [{"name": regex}, {"anime": regex}]}).to_list(length=50)
-        else:
-            characters = all_characters_cache.get('all_characters')
-            if not characters:
-                characters = await collection.find({}, {'_id': 0}).to_list(length=None)
-                all_characters_cache['all_characters'] = characters
+            characters = await collection.find(
+                {"$or": [{"name": regex}, {"anime": regex}]}
+            ).to_list(length=50)
 
     results = []
     page = characters[offset:offset + 50]
@@ -74,9 +78,8 @@ async def inlinequery(update: Update, context: CallbackContext) -> None:
     for character in page:
         formatted_name = format_character_name(character['name'])
 
-        if query.startswith("collection.") and user_data:
+        if user_data:
             user_count = sum(c['id'] == character['id'] for c in user_data['characters'])
-            total_anime = await collection.count_documents({'anime': character['anime']})
             owned_anime = sum(c['anime'] == character['anime'] for c in user_data['characters'])
 
             caption = (
@@ -85,22 +88,21 @@ async def inlinequery(update: Update, context: CallbackContext) -> None:
                 f"🫧 <b>Series:</b> {escape(character['anime'])}\n"
                 f"💥 <b>ID:</b> {character['id']} (x{user_count})\n"
                 f"🔔 <b>Rarity:</b> {character['rarity']}\n"
-                f"📦 <b>Your Anime Collection:</b> {owned_anime}/{total_anime}"
+                f"📦 <b>Your Anime Collection:</b> {owned_anime} / ?"
             )
         else:
-            global_count = await user_collection.count_documents({'characters.id': character['id']})
+            # REMOVE global count call (slow), or cache it externally if needed
             caption = (
                 f"💸 <b>New Character Picked!</b>\n\n"
                 f"🍂 <b>Name:</b> {escape(formatted_name)}\n"
                 f"🫧 <b>Series:</b> {escape(character['anime'])}\n"
                 f"💥 <b>ID:</b> {character['id']}\n"
-                f"🔔 <b>Rarity:</b> {character['rarity']}\n"
-                f"☯ <b>Globally Caught:</b> {global_count} Times"
+                f"🔔 <b>Rarity:</b> {character['rarity']}"
             )
 
         results.append(
             InlineQueryResultPhoto(
-                id=f"{character['id']}_{time.time()}",
+                id=f"{character['id']}_{int(time.time() * 1000)}",
                 photo_url=character['img_url'],
                 thumbnail_url=character['img_url'],
                 caption=caption,
@@ -109,7 +111,7 @@ async def inlinequery(update: Update, context: CallbackContext) -> None:
         )
 
     await update.inline_query.answer(results, next_offset=next_offset, cache_time=5)
-
+    
 # Register handler
 application.add_handler(InlineQueryHandler(inlinequery, block=False))
     
