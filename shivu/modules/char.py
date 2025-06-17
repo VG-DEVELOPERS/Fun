@@ -1,6 +1,6 @@
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import CallbackContext, CommandHandler, CallbackQueryHandler
-from shivu import collection
+from shivu import collection, application 
 
 # `/char <anime name>` command
 async def char_command(update: Update, context: CallbackContext):
