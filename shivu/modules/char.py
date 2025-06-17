@@ -1,9 +1,14 @@
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
+from telegram import (
+    Update,
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    InputMediaPhoto,
+)
 from telegram.ext import CommandHandler, CallbackQueryHandler, CallbackContext
 from shivu import collection, application
 
 
-# /char <character name> command
+# /char command
 async def char_command(update: Update, context: CallbackContext):
     args = context.args
     if not args:
@@ -18,11 +23,11 @@ async def char_command(update: Update, context: CallbackContext):
 
     context.chat_data["char_list"] = characters
     context.chat_data["char_index"] = 0
-    await show_char(update, context, new=True)
+    await show_character(update, context, new=True)
 
 
-# Show a character page with photo, name, anime, rarity, ID + buttons
-async def show_char(update: Update, context: CallbackContext, new=False):
+# Show character with photo + caption + buttons
+async def show_character(update: Update, context: CallbackContext, new=False):
     index = context.chat_data.get("char_index", 0)
     char_list = context.chat_data.get("char_list", [])
 
@@ -43,12 +48,13 @@ async def show_char(update: Update, context: CallbackContext, new=False):
         buttons.append(InlineKeyboardButton("⬅️ Prev", callback_data="char_prev"))
     if index < len(char_list) - 1:
         buttons.append(InlineKeyboardButton("Next ➡️", callback_data="char_next"))
-    keyboard = InlineKeyboardMarkup([buttons]) if buttons else None
 
-    media_url = char.get("img_url") or char.get("file_id")
+    keyboard = InlineKeyboardMarkup([buttons]) if buttons else None
+    media = InputMediaPhoto(media=char.get("img_url"), caption=caption, parse_mode="HTML")
+
     if new:
         await update.message.reply_photo(
-            photo=media_url,
+            photo=char.get("img_url"),
             caption=caption,
             parse_mode="HTML",
             reply_markup=keyboard
@@ -56,32 +62,31 @@ async def show_char(update: Update, context: CallbackContext, new=False):
     else:
         query = update.callback_query
         await query.answer()
-        await query.edit_message_media(
-            media=InputMediaPhoto(media=media_url),
-            reply_markup=keyboard
-        )
-        await query.edit_message_caption(caption=caption, parse_mode="HTML")
+        await query.edit_message_media(media=media)
+        await query.edit_message_reply_markup(reply_markup=keyboard)
 
 
-# Handle Prev/Next button presses
+# Callback for navigation
 async def char_callback(update: Update, context: CallbackContext):
-    query = update.callback_query
-    action = query.data
+    action = update.callback_query.data
     index = context.chat_data.get("char_index", 0)
-
-    if action == "char_prev":
-        index -= 1
-    elif action == "char_next":
-        index += 1
-
     char_list = context.chat_data.get("char_list", [])
+
+    if not char_list:
+        return
+
+    if action == "char_next":
+        index += 1
+    elif action == "char_prev":
+        index -= 1
+
     index = max(0, min(index, len(char_list) - 1))
     context.chat_data["char_index"] = index
 
-    await show_char(update, context, new=False)
+    await show_character(update, context, new=False)
 
 
 # Register handlers
 application.add_handler(CommandHandler("char", char_command, block=False))
-application.add_handler(CallbackQueryHandler(char_callback, pattern="^char_(prev|next)$", block=False))
+application.add_handler(CallbackQueryHandler(char_callback, pattern=r"^char_(next|prev)$", block=False))
     
