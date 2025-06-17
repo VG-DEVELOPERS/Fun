@@ -2,78 +2,86 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMe
 from telegram.ext import CommandHandler, CallbackQueryHandler, CallbackContext
 from shivu import collection, application
 
-# /char command — search by character name (partial match)
+
+# /char <character name> command
 async def char_command(update: Update, context: CallbackContext):
     args = context.args
     if not args:
         return await update.message.reply_text("❗ Usage: /char <character name or part of it>")
 
-    query_text = " ".join(args).strip()
-    regex = {"$regex": query_text, "$options": "i"}
-    matches = await collection.find(
-        {"name": regex},
-        {"_id": 0}
-    ).to_list(length=100)
+    query = " ".join(args)
+    regex = {"$regex": query, "$options": "i"}
+    characters = await collection.find({"name": regex}, {"_id": 0}).to_list(length=100)
 
-    if not matches:
+    if not characters:
         return await update.message.reply_text("❌ No characters found with that name.")
 
-    chat_id = update.effective_chat.id
-    context.chat_data["char_list"] = matches
+    context.chat_data["char_list"] = characters
     context.chat_data["char_index"] = 0
+    await show_char(update, context, new=True)
 
-    return await show_char_page(update, context, new_query=True)
 
-# Helper to show a character page, either initial or callback
-async def show_char_page(update: Update, context: CallbackContext, new_query=False):
-    characters = context.chat_data.get("char_list", [])
-    idx = context.chat_data.get("char_index", 0)
+# Show a character page with photo, name, anime, rarity, ID + buttons
+async def show_char(update: Update, context: CallbackContext, new=False):
+    index = context.chat_data.get("char_index", 0)
+    char_list = context.chat_data.get("char_list", [])
 
-    if idx < 0 or idx >= len(characters):
+    if not char_list:
         return
 
-    char = characters[idx]
+    char = char_list[index]
+
     caption = (
-        f"🪭 <b>{char['name']}</b>\n"
-        f"🌍 <b>Series:</b> {char.get('anime','N/A')}\n"
-        f"🏆 <b>Rarity:</b> {char.get('rarity','N/A')}\n"
+        f"🪭 <b>{char.get('name')}</b>\n"
+        f"🌍 <b>Series:</b> {char.get('anime')}\n"
+        f"🏆 <b>Rarity:</b> {char.get('rarity')}\n"
         f"🎴 <b>ID:</b> {char.get('id')}"
     )
 
-    keyboard = []
-    if idx > 0:
-        keyboard.append(InlineKeyboardButton("⬅️ Prev", callback_data="char_prev"))
-    if idx < len(characters) - 1:
-        keyboard.append(InlineKeyboardButton("Next ➡️", callback_data="char_next"))
+    buttons = []
+    if index > 0:
+        buttons.append(InlineKeyboardButton("⬅️ Prev", callback_data="char_prev"))
+    if index < len(char_list) - 1:
+        buttons.append(InlineKeyboardButton("Next ➡️", callback_data="char_next"))
+    keyboard = InlineKeyboardMarkup([buttons]) if buttons else None
 
-    media = char.get("img_url") or char.get("file_id")
-    if not media:
-        return await update.message.reply_text("⚠️ This character has no media.")
-
-    markup = InlineKeyboardMarkup([keyboard]) if keyboard else None
-
-    if new_query:
-        await update.message.reply_photo(photo=media, caption=caption, parse_mode="HTML", reply_markup=markup)
+    media_url = char.get("img_url") or char.get("file_id")
+    if new:
+        await update.message.reply_photo(
+            photo=media_url,
+            caption=caption,
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
     else:
         query = update.callback_query
         await query.answer()
-        await query.edit_message_media(media=InputMediaPhoto(media=media), reply_markup=markup)
+        await query.edit_message_media(
+            media=InputMediaPhoto(media=media_url),
+            reply_markup=keyboard
+        )
         await query.edit_message_caption(caption=caption, parse_mode="HTML")
 
-# Callback handler for navigation buttons
+
+# Handle Prev/Next button presses
 async def char_callback(update: Update, context: CallbackContext):
     query = update.callback_query
-    action = query.data  # "char_prev" or "char_next"
-    idx = context.chat_data.get("char_index", 0)
+    action = query.data
+    index = context.chat_data.get("char_index", 0)
 
     if action == "char_prev":
-        idx -= 1
+        index -= 1
     elif action == "char_next":
-        idx += 1
+        index += 1
 
-    context.chat_data["char_index"] = max(0, min(idx, len(context.chat_data.get("char_list", [])) - 1))
-    await show_char_page(update, context, new_query=False)
+    char_list = context.chat_data.get("char_list", [])
+    index = max(0, min(index, len(char_list) - 1))
+    context.chat_data["char_index"] = index
+
+    await show_char(update, context, new=False)
+
 
 # Register handlers
 application.add_handler(CommandHandler("char", char_command, block=False))
 application.add_handler(CallbackQueryHandler(char_callback, pattern="^char_(prev|next)$", block=False))
+    
